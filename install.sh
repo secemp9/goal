@@ -303,11 +303,11 @@ install_claude() {
     mv -f "$tmp" "$settings_file"
     success "Registered hooks in $settings_file"
 
-    # Install skill.
-    local skill_dir="$HOME/.claude/skills"
+    # Install skill. Claude Code expects skills/<name>/SKILL.md structure.
+    local skill_dir="$HOME/.claude/skills/goal"
     mkdir -p "$skill_dir"
-    cp "$INSTALL_DIR/skill/SKILL.md" "$skill_dir/goal.md"
-    success "Installed /goal skill to $skill_dir/goal.md"
+    cp "$INSTALL_DIR/skill/SKILL.md" "$skill_dir/SKILL.md"
+    success "Installed /goal skill to $skill_dir/SKILL.md"
 
     # Inject CLAUDE.md fragment.
     # Look for project CLAUDE.md first, then create/append.

@@ -139,11 +139,15 @@ uninstall_claude() {
         info "No settings file found at $settings_file (skipped)"
     fi
 
-    # Remove skill.
-    local skill_file="$HOME/.claude/skills/goal.md"
-    if [[ -f "$skill_file" ]]; then
-        rm -f "$skill_file"
-        success "Removed skill $skill_file"
+    # Remove skill. Claude Code expects skills/<name>/SKILL.md structure.
+    local skill_dir="$HOME/.claude/skills/goal"
+    if [[ -d "$skill_dir" ]]; then
+        rm -rf "$skill_dir"
+        success "Removed skill directory $skill_dir"
+    elif [[ -f "$HOME/.claude/skills/goal.md" ]]; then
+        # Legacy flat file cleanup.
+        rm -f "$HOME/.claude/skills/goal.md"
+        success "Removed legacy skill file"
     fi
 
     # Remove CLAUDE.md fragment.
