@@ -105,14 +105,21 @@ uninstall_claude() {
             info "No MCP server entry found in $settings_file (skipped)"
         fi
 
-        # Remove hook entries.
+        # Remove hook entries from the matcher+hooks format:
+        # {"Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "..."}]}]}
         local hook_path="$INSTALL_DIR/hooks"
         local tmp
         tmp="$(mktemp)"
         jq --arg hp "$hook_path" '
+            # Remove goal hook commands from inside {matcher, hooks[]} entries.
             def remove_goal_hooks($prefix):
                 if . == null then null
-                elif type == "array" then [.[] | select(.command | startswith($prefix) | not)]
+                elif type == "array" then
+                    [.[] |
+                        if .hooks and (.hooks | type) == "array" then
+                            .hooks = [.hooks[] | select(.command | startswith($prefix) | not)]
+                        else . end
+                    ] | [.[] | select(.hooks | length > 0)]
                 else .
                 end;
 
@@ -120,9 +127,9 @@ uninstall_claude() {
                 .hooks.Stop = (.hooks.Stop | remove_goal_hooks($hp))
                 | .hooks.PostToolBatch = (.hooks.PostToolBatch | remove_goal_hooks($hp))
                 | .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit | remove_goal_hooks($hp))
-                | if (.hooks.Stop | length) == 0 then del(.hooks.Stop) else . end
-                | if (.hooks.PostToolBatch | length) == 0 then del(.hooks.PostToolBatch) else . end
-                | if (.hooks.UserPromptSubmit | length) == 0 then del(.hooks.UserPromptSubmit) else . end
+                | if (.hooks.Stop // [] | length) == 0 then del(.hooks.Stop) else . end
+                | if (.hooks.PostToolBatch // [] | length) == 0 then del(.hooks.PostToolBatch) else . end
+                | if (.hooks.UserPromptSubmit // [] | length) == 0 then del(.hooks.UserPromptSubmit) else . end
                 | if (.hooks | keys | length) == 0 then del(.hooks) else . end
             else .
             end

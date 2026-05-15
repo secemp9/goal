@@ -261,22 +261,34 @@ install_claude() {
     local post_tool_hook="$INSTALL_DIR/hooks/post_tool_batch_hook.sh"
     local user_prompt_hook="$INSTALL_DIR/hooks/user_prompt_submit_hook.sh"
 
+    # Claude Code hooks use a matcher + hooks array format:
+    # {"EventName": [{"matcher": "", "hooks": [{"type": "command", "command": "..."}]}]}
     tmp="$(mktemp)"
     jq --arg stop "$stop_hook" \
        --arg post "$post_tool_hook" \
        --arg user "$user_prompt_hook" \
         '
-        # Helper function to add a hook entry if not already present.
-        def ensure_hook($cmd):
-            if . == null then [{"type": "command", "command": $cmd}]
-            elif (map(select(.command == $cmd)) | length) > 0 then .
-            else . + [{"type": "command", "command": $cmd}]
+        # Ensure a hook command exists inside the matcher+hooks structure.
+        # Each event is an array of {matcher, hooks[]} objects.
+        def ensure_hook_entry($cmd):
+            . as $arr |
+            if ($arr == null) then
+                [{"matcher": "", "hooks": [{"type": "command", "command": $cmd}]}]
+            elif ([$arr[] | .hooks[]? | select(.command == $cmd)] | length) > 0 then
+                $arr
+            else
+                # Append to existing matcher="" entry, or create one
+                if ([$arr[] | select(.matcher == "")] | length) > 0 then
+                    [$arr[] | if .matcher == "" then .hooks += [{"type": "command", "command": $cmd}] else . end]
+                else
+                    $arr + [{"matcher": "", "hooks": [{"type": "command", "command": $cmd}]}]
+                end
             end;
 
         .hooks = (.hooks // {})
-        | .hooks.Stop = (.hooks.Stop | ensure_hook($stop))
-        | .hooks.PostToolBatch = (.hooks.PostToolBatch | ensure_hook($post))
-        | .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit | ensure_hook($user))
+        | .hooks.Stop = (.hooks.Stop | ensure_hook_entry($stop))
+        | .hooks.PostToolBatch = (.hooks.PostToolBatch | ensure_hook_entry($post))
+        | .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit | ensure_hook_entry($user))
         ' "$settings_file" > "$tmp"
     mv -f "$tmp" "$settings_file"
     success "Registered hooks in $settings_file"

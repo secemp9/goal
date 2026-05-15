@@ -66,13 +66,13 @@ Claude Code gets the full experience: MCP tools, hooks for auto-continuation, th
   },
   "hooks": {
     "Stop": [
-      {"type": "command", "command": "/home/YOUR_USER/.goal/hooks/stop_hook.sh"}
+      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/stop_hook.sh"}]}
     ],
     "PostToolBatch": [
-      {"type": "command", "command": "/home/YOUR_USER/.goal/hooks/post_tool_batch_hook.sh"}
+      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/post_tool_batch_hook.sh"}]}
     ],
     "UserPromptSubmit": [
-      {"type": "command", "command": "/home/YOUR_USER/.goal/hooks/user_prompt_submit_hook.sh"}
+      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/user_prompt_submit_hook.sh"}]}
     ]
   }
 }
