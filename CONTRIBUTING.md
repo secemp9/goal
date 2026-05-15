@@ -47,7 +47,7 @@ If you change state behavior in one, change it in both.
 
 Hooks are Claude Code specific. They read state via `goal_lib.sh` (sourced) and communicate with Claude Code via:
 - **Stop hook**: exit code 0 (stop) or 2 (continue, with stderr as the prompt)
-- **PostToolBatch**: JSON on stdout with `hookSpecificOutput.additionalContext`
+- **PostToolUse**: JSON on stdout with `hookSpecificOutput.additionalContext`
 - **UserPromptSubmit**: JSON on stdout with `hookSpecificOutput.additionalContext`
 
 ### Templates

@@ -68,7 +68,7 @@ Claude Code gets the full experience: MCP tools, hooks for auto-continuation, th
     "Stop": [
       {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/stop_hook.sh"}]}
     ],
-    "PostToolBatch": [
+    "PostToolUse": [
       {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/post_tool_batch_hook.sh"}]}
     ],
     "UserPromptSubmit": [
@@ -208,7 +208,7 @@ Goal state is persisted as JSON (one goal per project):
 ### Hook Lifecycle (Claude Code only)
 
 1. **UserPromptSubmit** -- Injects a brief goal reminder at the start of each turn
-2. **PostToolBatch** -- Monitors budget proximity mid-turn, warns when close
+2. **PostToolUse** -- Monitors budget proximity mid-turn, warns when close
 3. **Stop** -- The auto-continuation engine:
    - Accounts wall-clock time
    - Increments turn counter

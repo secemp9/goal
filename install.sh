@@ -287,7 +287,7 @@ install_claude() {
 
         .hooks = (.hooks // {})
         | .hooks.Stop = (.hooks.Stop | ensure_hook_entry($stop))
-        | .hooks.PostToolBatch = (.hooks.PostToolBatch | ensure_hook_entry($post))
+        | .hooks.PostToolUse = (.hooks.PostToolUse | ensure_hook_entry($post))
         | .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit | ensure_hook_entry($user))
         ' "$settings_file" > "$tmp"
     mv -f "$tmp" "$settings_file"

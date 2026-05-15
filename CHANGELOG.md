@@ -8,7 +8,7 @@ Initial release.
 
 - **Goal state management** -- create, read, update, pause, resume, clear goals with JSON persistence
 - **MCP server** -- `get_goal`, `create_goal`, `update_goal` tools via stdio for any MCP-compatible editor
-- **Auto-continuation hooks** (Claude Code) -- Stop, PostToolBatch, and UserPromptSubmit hooks for autonomous multi-turn execution
+- **Auto-continuation hooks** (Claude Code) -- Stop, PostToolUse, and UserPromptSubmit hooks for autonomous multi-turn execution
 - **Turn budgets** -- cap agent turns with automatic budget-limited transitions and wrap-up prompts
 - **Completion audits** -- continuation prompt enforces evidence-based verification before marking goals complete
 - **`/goal` slash command** (Claude Code) -- full CLI for goal lifecycle management

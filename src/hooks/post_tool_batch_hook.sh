@@ -5,7 +5,7 @@
 #   goals.rs: account_thread_goal_progress() with BudgetLimitSteering::Allowed
 #   goals.rs: inject_budget_limit_steering()
 #
-# Claude Code PostToolBatch hook contract:
+# Claude Code PostToolUse hook contract:
 #   - Output JSON to stdout with hookSpecificOutput.additionalContext
 #     to inject context into the conversation.
 #   - Exit 0 always (this hook cannot force continuation).
@@ -50,13 +50,13 @@ escape_xml_text() {
     printf '%s' "$text"
 }
 
-# output_hook_json — Output the PostToolBatch hook response JSON.
+# output_hook_json — Output the PostToolUse hook response JSON.
 output_hook_json() {
     local context="$1"
     # Use jq to safely encode the context string into JSON.
     jq -n \
         --arg ctx "$context" \
-        '{hookSpecificOutput: {hookEventName: "PostToolBatch", additionalContext: $ctx}}'
+        '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
 }
 
 # render_template — Substitute placeholders in a template file.

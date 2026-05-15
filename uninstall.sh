@@ -125,10 +125,10 @@ uninstall_claude() {
 
             if .hooks then
                 .hooks.Stop = (.hooks.Stop | remove_goal_hooks($hp))
-                | .hooks.PostToolBatch = (.hooks.PostToolBatch | remove_goal_hooks($hp))
+                | .hooks.PostToolUse = (.hooks.PostToolUse | remove_goal_hooks($hp))
                 | .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit | remove_goal_hooks($hp))
                 | if (.hooks.Stop // [] | length) == 0 then del(.hooks.Stop) else . end
-                | if (.hooks.PostToolBatch // [] | length) == 0 then del(.hooks.PostToolBatch) else . end
+                | if (.hooks.PostToolUse // [] | length) == 0 then del(.hooks.PostToolUse) else . end
                 | if (.hooks.UserPromptSubmit // [] | length) == 0 then del(.hooks.UserPromptSubmit) else . end
                 | if (.hooks | keys | length) == 0 then del(.hooks) else . end
             else .
