@@ -20,42 +20,20 @@ Works with **Claude Code**, **Cursor**, and **OpenCode**.
 - Completion audits -- goals aren't marked done until evidence proves every requirement is met
 - Pause/resume/edit -- full lifecycle control
 
-## Quick Start
+## Add to Your Agent
 
-```bash
-git clone https://github.com/anthropics/goal.git
-cd goal
-./install.sh
-```
-
-The installer auto-detects your coding agents and configures them. Use flags to target specific agents:
-
-```bash
-./install.sh --claude     # Claude Code only (full: MCP + hooks + skill + CLAUDE.md)
-./install.sh --cursor     # Cursor only (MCP tools)
-./install.sh --opencode   # OpenCode only (MCP + skill + AGENTS.md)
-./install.sh --all        # All supported agents
-```
-
-### Prerequisites
-
-- **bash 4+**
-- **jq** -- [install](https://jqlang.github.io/jq/download/)
-- **python3**
-- **mcp** Python package -- `pip install mcp`
-
-## Per-Editor Setup
+All editors use the same MCP command: `uvx --from git+https://github.com/secemp9/goal.git goal-mcp`
 
 ### Claude Code
 
-Claude Code gets the full experience: MCP tools, hooks for auto-continuation, the `/goal` slash command, and CLAUDE.md integration.
+Add from the command line:
 
-**Automatic:**
 ```bash
-./install.sh --claude
+claude mcp add goal -- uvx --from git+https://github.com/secemp9/goal.git goal-mcp
 ```
 
-**Manual MCP:** Add to `.mcp.json` or `~/.claude/settings.json`:
+Add to your `.mcp.json`:
+
 ```json
 {
   "mcpServers": {
@@ -67,23 +45,19 @@ Claude Code gets the full experience: MCP tools, hooks for auto-continuation, th
 }
 ```
 
-Or via CLI:
+**Full experience (hooks + skill + auto-continuation):**
+
 ```bash
-claude mcp add goal -- uvx --from git+https://github.com/secemp9/goal.git goal-mcp
+git clone https://github.com/secemp9/goal.git
+cd goal && ./install.sh --claude
 ```
 
-For hooks and skill, run `./install.sh --claude` (hooks require `~/.goal/` files).
+This also registers hooks (Stop, PostToolUse, UserPromptSubmit), the `/goal` skill, and CLAUDE.md integration. Requires `uv`, `jq`, and `bash 4+`.
 
 ### Cursor
 
-Cursor gets MCP tools only (no auto-continuation).
+Add to `.cursor/mcp.json` in your project:
 
-**Automatic:**
-```bash
-./install.sh --cursor
-```
-
-**Manual:** Add to `.cursor/mcp.json` in your project:
 ```json
 {
   "mcpServers": {
@@ -97,16 +71,8 @@ Cursor gets MCP tools only (no auto-continuation).
 
 ### OpenCode
 
-OpenCode gets MCP tools, a `/goal` skill, and AGENTS.md integration (no auto-continuation hooks).
+Add to `opencode.json` in your project:
 
-**Automatic:**
-```bash
-./install.sh --opencode
-```
-
-This registers the MCP server, installs the `/goal` skill to `.agents/skills/goal/SKILL.md`, and injects goal system docs into `AGENTS.md` (OpenCode reads `AGENTS.md` like Claude Code reads `CLAUDE.md`).
-
-**Manual:** Add to `opencode.json` in your project or `~/.config/opencode/opencode.json` globally:
 ```json
 {
   "mcp": {
@@ -119,7 +85,12 @@ This registers the MCP server, installs the `/goal` skill to `.agents/skills/goa
 }
 ```
 
-For skill and AGENTS.md integration, run `./install.sh --opencode`.
+**Full experience (skill + AGENTS.md):**
+
+```bash
+git clone https://github.com/secemp9/goal.git
+cd goal && ./install.sh --opencode
+```
 
 ## Usage
 
