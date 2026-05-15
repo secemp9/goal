@@ -256,6 +256,16 @@ install_claude() {
     mv -f "$tmp" "$settings_file"
     success "Registered MCP server in $settings_file"
 
+    # Add permission for the /goal skill's bash command.
+    local goal_bash_pattern="Bash(bash ~/.goal/goal_cli.sh *)"
+    tmp="$(mktemp)"
+    jq --arg pat "$goal_bash_pattern" '
+        .permissions = (.permissions // {})
+        | .permissions.allow = ((.permissions.allow // []) | if (map(select(. == $pat)) | length) > 0 then . else . + [$pat] end)
+    ' "$settings_file" > "$tmp"
+    mv -f "$tmp" "$settings_file"
+    success "Added /goal skill permission"
+
     # Register hooks.
     local stop_hook="$INSTALL_DIR/hooks/stop_hook.sh"
     local post_tool_hook="$INSTALL_DIR/hooks/post_tool_batch_hook.sh"
