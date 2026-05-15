@@ -57,23 +57,10 @@ check_prerequisites() {
         missing=1
     fi
 
-    # python3 — used by the MCP server.
-    if ! command -v python3 &>/dev/null; then
-        error "python3 is required but not found."
+    # uv — used to run the MCP server as a proper Python package.
+    if ! command -v uv &>/dev/null; then
+        error "uv is required. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
         missing=1
-    fi
-
-    # pip mcp module — required by goal_server.py.
-    if command -v python3 &>/dev/null; then
-        if ! python3 -c "import mcp" &>/dev/null 2>&1; then
-            warn "Python 'mcp' package not found. Installing..."
-            if python3 -m pip install mcp &>/dev/null 2>&1; then
-                success "Installed Python 'mcp' package."
-            else
-                error "Failed to install Python 'mcp' package. Run: pip install mcp"
-                missing=1
-            fi
-        fi
     fi
 
     if (( missing )); then
@@ -157,7 +144,7 @@ install_core() {
     info "Installing goal to $INSTALL_DIR ..."
 
     # Create directory structure.
-    mkdir -p "$INSTALL_DIR"/{hooks,mcp-server,templates,skill}
+    mkdir -p "$INSTALL_DIR"/{hooks,mcp-server,templates,skill,src/goal_mcp}
 
     # Copy all source files.
     cp "$SRC_DIR/goal_lib.sh"                   "$INSTALL_DIR/goal_lib.sh"
@@ -174,6 +161,11 @@ install_core() {
     cp "$SRC_DIR/skill/SKILL.md"                "$INSTALL_DIR/skill/SKILL.md"
     cp "$SRC_DIR/claude-md-fragment.md"         "$INSTALL_DIR/claude-md-fragment.md"
     cp "$SRC_DIR/agents-md-fragment.md"         "$INSTALL_DIR/agents-md-fragment.md"
+
+    # Copy the Python package (goal-mcp) for uv-based MCP server.
+    cp "$SRC_DIR/goal_mcp/__init__.py"          "$INSTALL_DIR/src/goal_mcp/__init__.py"
+    cp "$SRC_DIR/goal_mcp/server.py"            "$INSTALL_DIR/src/goal_mcp/server.py"
+    cp "$SCRIPT_DIR/pyproject.toml"             "$INSTALL_DIR/pyproject.toml"
 
     # Make shell scripts executable.
     chmod +x "$INSTALL_DIR/goal_lib.sh"
@@ -245,13 +237,11 @@ install_claude() {
     local settings_file="$HOME/.claude/settings.json"
     ensure_json_file "$settings_file"
 
-    local server_path="$INSTALL_DIR/mcp-server/goal_server.py"
-
-    # Register MCP server.
+    # Register MCP server using uvx to run the goal-mcp package from git.
+    # No hardcoded paths — uvx handles environment isolation automatically.
     local tmp
     tmp="$(mktemp)"
-    jq --arg path "$server_path" \
-        '.mcpServers = (.mcpServers // {}) | .mcpServers.goal = {"command": "python3", "args": [$path]}' \
+    jq '.mcpServers = (.mcpServers // {}) | .mcpServers.goal = {"command": "uvx", "args": ["--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"]}' \
         "$settings_file" > "$tmp"
     mv -f "$tmp" "$settings_file"
     success "Registered MCP server in $settings_file"
@@ -341,12 +331,10 @@ install_cursor() {
     local config_file=".cursor/mcp.json"
     ensure_json_file "$config_file"
 
-    local server_path="$INSTALL_DIR/mcp-server/goal_server.py"
-
+    # Register MCP server using uvx from git — no hardcoded paths.
     local tmp
     tmp="$(mktemp)"
-    jq --arg path "$server_path" \
-        '.mcpServers = (.mcpServers // {}) | .mcpServers.goal = {"command": "python3", "args": [$path]}' \
+    jq '.mcpServers = (.mcpServers // {}) | .mcpServers.goal = {"command": "uvx", "args": ["--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"]}' \
         "$config_file" > "$tmp"
     mv -f "$tmp" "$config_file"
 
@@ -374,13 +362,12 @@ install_opencode() {
     fi
     ensure_json_file "$config_file"
 
-    local server_path="$INSTALL_DIR/mcp-server/goal_server.py"
-
     # Read config (strip JSONC comments if needed), merge, write back.
+    # Register MCP server using uv to run the goal-mcp package.
     local tmp
     tmp="$(mktemp)"
-    read_json_file "$config_file" | jq --arg path "$server_path" \
-        '.mcp = (.mcp // {}) | .mcp.goal = {"type": "local", "command": ["python3", $path], "enabled": true}' \
+    read_json_file "$config_file" | jq \
+        '.mcp = (.mcp // {}) | .mcp.goal = {"type": "local", "command": ["uvx", "--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"], "enabled": true}' \
         > "$tmp"
     mv -f "$tmp" "$config_file"
 

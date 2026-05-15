@@ -55,30 +55,24 @@ Claude Code gets the full experience: MCP tools, hooks for auto-continuation, th
 ./install.sh --claude
 ```
 
-**Manual:** Add to `~/.claude/settings.json`:
+**Manual MCP:** Add to `.mcp.json` or `~/.claude/settings.json`:
 ```json
 {
   "mcpServers": {
     "goal": {
-      "command": "python3",
-      "args": ["/home/YOUR_USER/.goal/mcp-server/goal_server.py"]
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"]
     }
-  },
-  "hooks": {
-    "Stop": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/stop_hook.sh"}]}
-    ],
-    "PostToolUse": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/post_tool_batch_hook.sh"}]}
-    ],
-    "UserPromptSubmit": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "/home/YOUR_USER/.goal/hooks/user_prompt_submit_hook.sh"}]}
-    ]
   }
 }
 ```
 
-Then copy `src/skill/SKILL.md` to `~/.claude/skills/goal.md` and append `src/claude-md-fragment.md` to your project's `CLAUDE.md`.
+Or via CLI:
+```bash
+claude mcp add goal -- uvx --from git+https://github.com/secemp9/goal.git goal-mcp
+```
+
+For hooks and skill, run `./install.sh --claude` (hooks require `~/.goal/` files).
 
 ### Cursor
 
@@ -94,8 +88,8 @@ Cursor gets MCP tools only (no auto-continuation).
 {
   "mcpServers": {
     "goal": {
-      "command": "python3",
-      "args": ["/home/YOUR_USER/.goal/mcp-server/goal_server.py"]
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"]
     }
   }
 }
@@ -112,24 +106,20 @@ OpenCode gets MCP tools, a `/goal` skill, and AGENTS.md integration (no auto-con
 
 This registers the MCP server, installs the `/goal` skill to `.agents/skills/goal/SKILL.md`, and injects goal system docs into `AGENTS.md` (OpenCode reads `AGENTS.md` like Claude Code reads `CLAUDE.md`).
 
-**Manual:** Add to `opencode.json` (or `opencode.jsonc`, `.opencode.json`, `.opencode.jsonc`) in your project, or `~/.config/opencode/opencode.json` globally:
+**Manual:** Add to `opencode.json` in your project or `~/.config/opencode/opencode.json` globally:
 ```json
 {
   "mcp": {
     "goal": {
       "type": "local",
-      "command": ["python3", "~/.goal/mcp-server/goal_server.py"],
+      "command": ["uvx", "--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"],
       "enabled": true
     }
   }
 }
 ```
 
-Then copy `src/skill/SKILL.md` to `.agents/skills/goal/SKILL.md` and append `src/agents-md-fragment.md` to your project's `AGENTS.md` between `<!-- goal-system -->` and `<!-- /goal-system -->` markers.
-
-> **Note:** OpenCode has a plugin system that could enable deeper integration (auto-continuation, hooks) in the future.
-
-> **Note:** Replace `~/.goal` with the full path if your shell does not expand tilde in JSON values (`echo $HOME`).
+For skill and AGENTS.md integration, run `./install.sh --opencode`.
 
 ## Usage
 
