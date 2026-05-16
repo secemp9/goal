@@ -11,7 +11,7 @@ Manage long-running, multi-turn goals with auto-continuation.
 
 ## Current State
 
-!`bash ~/.goal/goal_cli.sh $ARGUMENTS 2>&1`
+!`bash ~/.goal/goal_cli.sh "$ARGUMENTS" 2>&1`
 
 ## Instructions
 

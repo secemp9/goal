@@ -413,17 +413,29 @@ cmd_budget() {
 # ---------------------------------------------------------------------------
 
 main() {
-    local subcommand="${1:-}"
+    # When called from a skill with "$ARGUMENTS", all args arrive as a single
+    # string in $1. When called directly, args are separate. Normalize by
+    # joining all args then extracting the first word as the subcommand.
+    local full_args="$*"
 
     # Bare /goal — show summary.
-    if [[ -z "$subcommand" ]]; then
+    if [[ -z "$full_args" ]]; then
         cmd_show
         return
     fi
 
-    # Normalize subcommand to lowercase for matching.
+    # Extract first word as potential subcommand.
+    local first_word rest
+    first_word="${full_args%% *}"
+    if [[ "$full_args" == *" "* ]]; then
+        rest="${full_args#* }"
+    else
+        rest=""
+    fi
+
+    # Normalize to lowercase for matching.
     local subcmd_lower
-    subcmd_lower="$(echo "$subcommand" | tr '[:upper:]' '[:lower:]')"
+    subcmd_lower="$(echo "$first_word" | tr '[:upper:]' '[:lower:]')"
 
     case "$subcmd_lower" in
         clear)
@@ -439,18 +451,14 @@ main() {
             cmd_show
             ;;
         edit)
-            shift
-            local edit_text="$*"
-            cmd_edit "$edit_text"
+            cmd_edit "$rest"
             ;;
         budget)
-            shift
-            cmd_budget "${1:-}"
+            cmd_budget "$rest"
             ;;
         *)
             # Everything else is treated as an objective to create a goal.
-            local objective="$*"
-            cmd_create "$objective"
+            cmd_create "$full_args"
             ;;
     esac
 }
