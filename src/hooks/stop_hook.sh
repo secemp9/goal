@@ -8,18 +8,19 @@
 #   goals.rs: build_continuation_items() / continuation_prompt()
 #
 # Claude Code Stop hook contract:
-#   - Exit 0: allow Claude to stop normally.
-#   - Exit 2: force continuation. The message on stderr becomes the
-#     continuation prompt that Claude sees on its next turn.
+#   - Exit 0 with no decision output: allow Claude to stop normally.
+#   - Exit 0 with JSON on stdout containing decision "block" and a reason:
+#     ask Claude to continue, using reason as the next-turn prompt.
 #
 # Flow:
 #   1. Read goal state.
 #   2. If no active/budget_limited goal -> exit 0.
 #   3. Compute wall-clock time delta from updated_at to now, persist it.
 #   4. Increment turn counter (goal_increment_turn).
-#   5. If goal was active and remains active -> render continuation.md, exit 2.
+#   5. If goal was active and remains active -> render continuation.md, emit
+#      Stop decision JSON.
 #   6. If goal just transitioned to budget_limited (increment returned 2) ->
-#      render budget_limit.md, exit 2 (one wrap-up turn).
+#      render budget_limit.md, emit Stop decision JSON (one wrap-up turn).
 #   7. If goal was already budget_limited before this call -> exit 0 (wrap-up
 #      turn already happened).
 #   8. If goal is complete or paused -> exit 0.
@@ -104,6 +105,12 @@ render_template() {
 wrap_goal_context() {
     local prompt="$1"
     printf '<goal_context>\n%s\n</goal_context>' "$prompt"
+}
+
+# emit_stop_block_decision — Ask Claude Code to continue from a Stop hook.
+emit_stop_block_decision() {
+    local reason="$1"
+    jq -n --arg reason "$reason" '{decision: "block", reason: $reason}'
 }
 
 # ---------------------------------------------------------------------------
@@ -197,8 +204,8 @@ if (( increment_exit == 2 )); then
         "$remaining_turns_display" \
         "$time_used_seconds")"
     wrapped="$(wrap_goal_context "$prompt")"
-    echo "$wrapped" >&2
-    exit 2
+    emit_stop_block_decision "$wrapped"
+    exit 0
 elif [[ "$status" == "active" ]]; then
     # Goal is still active — continue with the full continuation prompt.
     prompt="$(render_template \
@@ -209,8 +216,8 @@ elif [[ "$status" == "active" ]]; then
         "$remaining_turns_display" \
         "$time_used_seconds")"
     wrapped="$(wrap_goal_context "$prompt")"
-    echo "$wrapped" >&2
-    exit 2
+    emit_stop_block_decision "$wrapped"
+    exit 0
 else
     # Status is something unexpected (complete/paused set externally during
     # the turn). Let Claude stop.
