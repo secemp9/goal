@@ -46,7 +46,7 @@ If you change state behavior in one, change it in both.
 ### Hooks
 
 Hooks are Claude Code specific. They read state via `goal_lib.sh` (sourced) and communicate with Claude Code via:
-- **Stop hook**: exit code 0 (stop) or 2 (continue, with stderr as the prompt)
+- **Stop hook**: exit code 0 with no decision output to allow stopping, or exit code 0 with JSON on stdout containing `decision: "block"` and `reason` as the continuation prompt
 - **PostToolUse**: JSON on stdout with `hookSpecificOutput.additionalContext`
 - **UserPromptSubmit**: JSON on stdout with `hookSpecificOutput.additionalContext`
 
@@ -60,15 +60,16 @@ The MCP server uses the Python `mcp` package and runs as a local stdio process. 
 
 ### Testing
 
-Currently manual. To test:
+Run the targeted contract check plus manual Claude Code verification when hook behavior changes:
 
-1. Install for Claude Code: `./install.sh --claude`
-2. Start a Claude Code session
-3. Run `/goal improve test coverage`
-4. Verify auto-continuation works (hook forces another turn)
-5. Run `/goal pause` and verify Claude stops
-6. Run `/goal resume` and verify continuation resumes
-7. Test budgets: `/goal budget 3` and verify budget_limited transition
+1. Run `tests/stop_hook_contract.sh`
+2. Install for Claude Code: `./install.sh --claude`
+3. Start a Claude Code session
+4. Run `/goal improve test coverage`
+5. Verify auto-continuation works (hook forces another turn)
+6. Run `/goal pause` and verify Claude stops
+7. Run `/goal resume` and verify continuation resumes
+8. Test budgets: `/goal budget 3` and verify budget_limited transition
 
 ## Codex CLI Alignment
 

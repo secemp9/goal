@@ -173,8 +173,8 @@ Goal state is persisted as JSON (one goal per project):
 3. **Stop** -- The auto-continuation engine:
    - Accounts wall-clock time
    - Increments turn counter
-   - If active and within budget: renders continuation prompt, forces another turn
-   - If just hit budget limit: renders wrap-up prompt, gives one final turn
+   - If active and within budget: renders continuation prompt and emits a structured block decision
+   - If just hit budget limit: renders wrap-up prompt and emits one final structured block decision
    - If already budget-limited, paused, or complete: lets Claude stop
 
 ### Codex CLI Heritage
