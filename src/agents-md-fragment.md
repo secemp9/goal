@@ -3,9 +3,10 @@
 This project has a goal system (ported from Codex CLI) for long-running, multi-turn tasks.
 
 ## How it works
-- Goals persist in `.claude/goal/goal_state.json` with status, objective, turn/time accounting.
+- Goals persist in `.claude/goal/goal_state.json` with status and objective (shared with Claude Code).
 - The `/goal` skill command is the user interface. Users set, view, pause, resume, edit, and clear goals through it.
-- There is no auto-continuation in OpenCode — you must manually continue working toward the goal each turn.
+- The OpenCode V2 plugin auto-continues active goals after successful turns, with turn/time accounting and one budget-limited wrap-up turn.
+- Goals are bound to one root session. Child sessions and unrelated sessions cannot drive the loop. User interruption and execution failure pause it; `/goal resume` resumes deliberately.
 
 ## MCP tools (goal-server)
 - `get_goal` — read current goal state (status, objective, budget, usage).
@@ -26,6 +27,6 @@ Before marking a goal complete, perform the completion audit:
 - Do not redefine success around a smaller or easier task to claim completion.
 
 ## Budget
-- Goals may have a turn budget. Track turns and wrap up when budget is reached.
+- Goals may have a turn budget. The OpenCode plugin counts successful execution periods (not individual tool calls) and enforces the limit.
 - When budget-limited, wrap up and summarize rather than starting new work.
 - If a budgeted goal is completed, report final turn usage to the user.

@@ -29,6 +29,11 @@ src/
     objective_updated.md
   skill/
     SKILL.md                  # /goal slash command definition
+  opencode/
+    SKILL.md                  # OpenCode-specific skill
+    plugin/
+      index.ts                # Native OpenCode V2 plugin entrypoint
+      runtime.mjs             # /goal command, context, accounting, continuation
   claude-md-fragment.md       # CLAUDE.md content for Claude Code
   agents-md-fragment.md       # AGENTS.md content for OpenCode
 install.sh                    # Multi-agent installer
@@ -60,7 +65,30 @@ The MCP server uses the Python `mcp` package and runs as a local stdio process. 
 
 ### Testing
 
-Currently manual. To test:
+Automated regression tests:
+
+```bash
+uv run --python 3.12 python -m unittest discover -s tests -v
+bun test tests/opencode_runtime.test.mjs
+```
+
+After `./install.sh --opencode` (global by default), run the opt-in end-to-end test against a local
+OpenCode V2 service. It uses an isolated temporary project and a fake model on
+localhost, makes no paid model calls, and removes its test session afterward:
+
+```bash
+RUN_OPENCODE_LIVE=1 uv run --python 3.12 python -m unittest discover -s tests -p test_opencode_live.py -v
+```
+
+The temporary project has no local goal definitions: it verifies global MCP,
+skill, and plugin discovery, the installed plugin's native `/goal` command, literal argument
+handling, context injection, automatic continuation, turn limits, one final
+wrap-up, and stopping on user interruption. Runtime unit tests also cover
+pause/completion/clear, replacement, session ownership, children, failures, and
+cleanup. OpenCode 2.1.4 needs local event-type filtering even when subscription
+filters are requested; keep the defensive filter in the runtime.
+
+For manual Claude Code testing:
 
 1. Install for Claude Code: `./install.sh --claude`
 2. Start a Claude Code session

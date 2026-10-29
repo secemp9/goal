@@ -17,6 +17,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.goal"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/src"
+OPENCODE_SCOPE="global"
 
 # Agents to install for (populated by flag parsing or auto-detect).
 declare -a AGENTS=()
@@ -44,10 +45,8 @@ error()   { printf "${RED}[err]${NC}  %s\n" "$*" >&2; }
 check_prerequisites() {
     local missing=0
 
-    # bash 4+ (for associative arrays, though we don't use them here, it's a
-    # good baseline for modern bash features).
-    if (( BASH_VERSINFO[0] < 4 )); then
-        error "bash 4+ is required (found ${BASH_VERSION})"
+    if ! command -v python3 &>/dev/null; then
+        error "python3 is required for JSONC configuration support."
         missing=1
     fi
 
@@ -89,7 +88,7 @@ detect_agents() {
     fi
 
     # OpenCode: look for opencode.json in CWD or ~/.config/opencode/
-    if [[ -f "opencode.json" ]] || [[ -f ".opencode.json" ]] || [[ -d "$HOME/.config/opencode" ]]; then
+    if [[ -f "opencode.json" ]] || [[ -f "opencode.jsonc" ]] || [[ -d ".opencode" ]] || [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" ]]; then
         detected+=("opencode")
     fi
 
@@ -144,7 +143,7 @@ install_core() {
     info "Installing goal to $INSTALL_DIR ..."
 
     # Create directory structure.
-    mkdir -p "$INSTALL_DIR"/{hooks,mcp-server,templates,skill,src/goal_mcp}
+    mkdir -p "$INSTALL_DIR"/{hooks,mcp-server,templates,skill,opencode/plugin,src/goal_mcp}
 
     # Copy all source files.
     cp "$SRC_DIR/goal_lib.sh"                   "$INSTALL_DIR/goal_lib.sh"
@@ -166,6 +165,10 @@ install_core() {
     cp "$SRC_DIR/goal_mcp/__init__.py"          "$INSTALL_DIR/src/goal_mcp/__init__.py"
     cp "$SRC_DIR/goal_mcp/server.py"            "$INSTALL_DIR/src/goal_mcp/server.py"
     cp "$SCRIPT_DIR/pyproject.toml"             "$INSTALL_DIR/pyproject.toml"
+    cp "$SCRIPT_DIR/README.md"                  "$INSTALL_DIR/README.md"
+    cp "$SRC_DIR/opencode/SKILL.md"             "$INSTALL_DIR/opencode/SKILL.md"
+    cp "$SRC_DIR/opencode/plugin/index.ts"      "$INSTALL_DIR/opencode/plugin/index.ts"
+    cp "$SRC_DIR/opencode/plugin/runtime.mjs"   "$INSTALL_DIR/opencode/plugin/runtime.mjs"
 
     # Make shell scripts executable.
     chmod +x "$INSTALL_DIR/goal_lib.sh"
@@ -185,13 +188,8 @@ install_core() {
 # strip_jsonc — Strip // and /* */ comments from JSONC content.
 # Required because jq cannot parse JSONC. OpenCode uses .jsonc files.
 strip_jsonc() {
-    # String-aware JSONC comment stripper. Preserves // inside quoted strings
-    # (e.g., URLs like "https://example.com"). Uses perl alternation: match
-    # quoted strings first (and keep them), then match comments (and remove).
-    perl -0777 -pe '
-        s{ ("(?:[^"\\\\]|\\\\.)*") | (//[^\n]*) | (/\*.*?\*/) }
-         { defined($1) ? $1 : "" }gsxe
-    ' 2>/dev/null || cat
+    # Preserve quoted strings while removing comments and trailing commas.
+    python3 "$SRC_DIR/jsonc.py"
 }
 
 # read_json_file — Read a JSON or JSONC file, stripping comments if needed.
@@ -345,20 +343,25 @@ install_cursor() {
 install_opencode() {
     info "Configuring OpenCode..."
 
-    # Prefer project-level opencode config, fall back to global.
+    local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+    local definitions_dir="$config_dir"
+    local agents_md="$config_dir/AGENTS.md"
     local config_file=""
-    for candidate in "opencode.json" "opencode.jsonc" ".opencode.json" ".opencode.jsonc"; do
+    local -a candidates=("$config_dir/opencode.json" "$config_dir/opencode.jsonc")
+    if [[ "$OPENCODE_SCOPE" == "project" ]]; then
+        definitions_dir=".opencode"
+        agents_md="AGENTS.md"
+        candidates=(".opencode/opencode.json" ".opencode/opencode.jsonc" "opencode.json" "opencode.jsonc")
+    fi
+    for candidate in "${candidates[@]}"; do
         if [[ -f "$candidate" ]]; then
             config_file="$candidate"
             break
         fi
     done
-    if [[ -z "$config_file" ]] && [[ -f "$HOME/.config/opencode/opencode.json" ]]; then
-        config_file="$HOME/.config/opencode/opencode.json"
-    fi
     if [[ -z "$config_file" ]]; then
-        # Create project-level config.
-        config_file="opencode.json"
+        config_file="${candidates[0]}"
+        if [[ "$OPENCODE_SCOPE" == "project" ]]; then config_file="opencode.json"; fi
     fi
     ensure_json_file "$config_file"
 
@@ -366,21 +369,43 @@ install_opencode() {
     # Register MCP server using uv to run the goal-mcp package.
     local tmp
     tmp="$(mktemp)"
-    read_json_file "$config_file" | jq \
-        '.mcp = (.mcp // {}) | .mcp.goal = {"type": "local", "command": ["uvx", "--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"], "enabled": true}' \
-        > "$tmp"
+    if ! read_json_file "$config_file" | jq --arg package "$INSTALL_DIR" --arg uv "$(command -v uv)" \
+        --arg scope "$OPENCODE_SCOPE" --arg plugin "$INSTALL_DIR/opencode/plugin" \
+        '."$schema" = (."$schema" // "https://opencode.ai/config.json")
+         | .mcp = (.mcp // {}) | del(.mcp.goal)
+         | .mcp.servers.goal = {"type": "local", "command": [$uv, "tool", "run", "--from", $package, "goal-mcp"]}
+         | if $scope == "global" then
+             .plugins = ((.plugins // []) | if any(.[]; (if type == "string" then . else .package end) == $plugin)
+                 then . else . + [$plugin] end)
+           else . end' \
+        > "$tmp"; then
+        rm -f "$tmp"
+        error "Could not parse $config_file; the original file was not changed."
+        return 1
+    fi
     mv -f "$tmp" "$config_file"
 
     success "Registered MCP server in $config_file"
 
-    # Install skill to .agents/skills/goal/ (OpenCode reads this directory).
-    local skill_dir=".agents/skills/goal"
+    # Use native OpenCode definitions, not Claude's dynamic skill syntax.
+    local skill_dir="$definitions_dir/skills/goal"
     mkdir -p "$skill_dir"
-    cp "$INSTALL_DIR/skill/SKILL.md" "$skill_dir/SKILL.md"
-    success "Installed /goal skill to $skill_dir/SKILL.md"
+    cp "$INSTALL_DIR/opencode/SKILL.md" "$skill_dir/SKILL.md"
+    # The plugin registers /goal natively. A Markdown command with the same
+    # name would override it later in OpenCode's command transform order.
+    if [[ "$OPENCODE_SCOPE" == "project" ]]; then
+        mkdir -p "$definitions_dir/plugins/goal"
+        cp "$INSTALL_DIR/opencode/plugin/index.ts" "$definitions_dir/plugins/goal/index.ts"
+        cp "$INSTALL_DIR/opencode/plugin/runtime.mjs" "$definitions_dir/plugins/goal/runtime.mjs"
+    fi
+    # Remove only the unmodified Claude-specific skill from older installs.
+    if [[ "$OPENCODE_SCOPE" == "project" ]] && [[ -f .agents/skills/goal/SKILL.md ]] && cmp -s "$INSTALL_DIR/skill/SKILL.md" .agents/skills/goal/SKILL.md; then
+        rm -f .agents/skills/goal/SKILL.md
+        rmdir .agents/skills/goal .agents/skills .agents 2>/dev/null || true
+    fi
+    success "Installed /goal command, skill, and auto-continuation plugin"
 
     # Inject AGENTS.md fragment (OpenCode reads AGENTS.md like Claude Code reads CLAUDE.md).
-    local agents_md="AGENTS.md"
     local fragment="$INSTALL_DIR/agents-md-fragment.md"
     local marker="<!-- goal-system -->"
 
@@ -392,7 +417,18 @@ install_opencode() {
             printf '\n%s\n' "<!-- /goal-system -->" >> "$agents_md"
             success "Appended goal system docs to $agents_md"
         else
-            success "Goal system docs already present in $agents_md (skipped)"
+            python3 - "$agents_md" "$fragment" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path, fragment = map(Path, sys.argv[1:])
+block = "<!-- goal-system -->\n" + fragment.read_text() + "\n<!-- /goal-system -->"
+text = re.sub(r"<!-- goal-system -->.*?<!-- /goal-system -->", lambda _: block,
+              path.read_text(), count=1, flags=re.DOTALL)
+path.write_text(text)
+PY
+            success "Updated goal system docs in $agents_md"
         fi
     else
         printf '%s\n' "$marker" > "$agents_md"
@@ -401,7 +437,7 @@ install_opencode() {
         success "Created $agents_md with goal system docs"
     fi
 
-    success "OpenCode configuration complete."
+    success "OpenCode $OPENCODE_SCOPE configuration complete."
 }
 
 # ---------------------------------------------------------------------------
@@ -414,6 +450,8 @@ parse_args() {
             --claude)   AGENTS+=("claude") ;;
             --cursor)   AGENTS+=("cursor") ;;
             --opencode) AGENTS+=("opencode") ;;
+            --global)   OPENCODE_SCOPE="global" ;;
+            --project)  OPENCODE_SCOPE="project" ;;
             --all)      AGENTS=("claude" "cursor" "opencode") ;;
             -h|--help)
                 echo "Usage: ./install.sh [--claude] [--cursor] [--opencode] [--all]"
@@ -423,7 +461,9 @@ parse_args() {
                 echo "Flags:"
                 echo "  --claude     Install for Claude Code (MCP + hooks + skill + CLAUDE.md)"
                 echo "  --cursor     Install for Cursor (MCP only)"
-                echo "  --opencode   Install for OpenCode (MCP + skill + AGENTS.md)"
+                echo "  --opencode   Install globally for OpenCode (MCP + plugin + skill + AGENTS.md)"
+                echo "  --project    Limit OpenCode installation to the current project"
+                echo "  --global     Install OpenCode globally (default)"
                 echo "  --all        Install for all supported agents"
                 echo "  -h, --help   Show this help message"
                 echo ""
@@ -493,15 +533,14 @@ main() {
                 info "  Use the create_goal / get_goal / update_goal tools."
                 ;;
             opencode)
-                info "OpenCode: restart OpenCode to pick up the MCP server."
+                info "OpenCode reloads configuration automatically; use /reload if needed."
                 info "  Use the create_goal / get_goal / update_goal tools, /goal skill, or AGENTS.md context."
                 ;;
         esac
     done
 
     echo ""
-    info "Note: Auto-continuation (hooks) is only available in Claude Code."
-    info "Other editors get MCP tools (create_goal, get_goal, update_goal) only."
+    info "Auto-continuation: Claude Code hooks and OpenCode V2 plugin. Cursor gets MCP tools only."
     echo ""
 }
 

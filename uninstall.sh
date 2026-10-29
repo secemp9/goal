@@ -15,6 +15,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 INSTALL_DIR="$HOME/.goal"
+OPENCODE_SCOPE="global"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Agents to uninstall from (populated by flag parsing).
 declare -a AGENTS=()
@@ -42,10 +44,7 @@ error()   { printf "${RED}[err]${NC}  %s\n" "$*" >&2; }
 
 # strip_jsonc — Strip comments from JSONC, preserving // inside quoted strings.
 strip_jsonc() {
-    perl -0777 -pe '
-        s{ ("(?:[^"\\\\]|\\\\.)*") | (//[^\n]*) | (/\*.*?\*/) }
-         { defined($1) ? $1 : "" }gsxe
-    ' 2>/dev/null || cat
+    python3 "$SCRIPT_DIR/src/jsonc.py"
 }
 
 # read_json_file — Read a JSON or JSONC file, stripping comments if needed.
@@ -196,9 +195,17 @@ uninstall_cursor() {
 uninstall_opencode() {
     info "Removing OpenCode configuration..."
 
-    # Check multiple possible locations.
+    local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+    local definitions_dir="$config_dir"
+    local agents_md="$config_dir/AGENTS.md"
     local config_file=""
-    for candidate in "opencode.json" "opencode.jsonc" ".opencode.json" ".opencode.jsonc" "$HOME/.config/opencode/opencode.json"; do
+    local -a candidates=("$config_dir/opencode.json" "$config_dir/opencode.jsonc")
+    if [[ "$OPENCODE_SCOPE" == "project" ]]; then
+        definitions_dir=".opencode"
+        agents_md="AGENTS.md"
+        candidates=(".opencode/opencode.json" ".opencode/opencode.jsonc" "opencode.json" "opencode.jsonc")
+    fi
+    for candidate in "${candidates[@]}"; do
         if [[ -f "$candidate" ]]; then
             config_file="$candidate"
             break
@@ -207,8 +214,8 @@ uninstall_opencode() {
 
     if [[ -n "$config_file" ]]; then
         # Use read_json_file to handle JSONC comment stripping for .jsonc files.
-        if read_json_file "$config_file" | jq -e '.mcp.goal' &>/dev/null; then
-            remove_json_key "$config_file" 'del(.mcp.goal)'
+        if read_json_file "$config_file" | jq -e '.mcp.servers.goal // .mcp.goal' &>/dev/null; then
+            remove_json_key "$config_file" 'del(.mcp.goal, .mcp.servers.goal) | if .mcp.servers == {} then del(.mcp.servers) else . end'
             success "Removed MCP server from $config_file"
 
             # Clean up empty mcp.
@@ -222,9 +229,34 @@ uninstall_opencode() {
         info "No OpenCode config file found (skipped)"
     fi
 
+    if [[ -n "$config_file" ]] && [[ "$OPENCODE_SCOPE" == "global" ]]; then
+        local tmp
+        tmp="$(mktemp)"
+        if read_json_file "$config_file" | jq --arg plugin "$INSTALL_DIR/opencode/plugin" '
+            if .plugins then
+                .plugins |= map(select((if type == "string" then . else .package end) != $plugin))
+                | if .plugins == [] then del(.plugins) else . end
+            else . end' > "$tmp"; then
+            mv -f "$tmp" "$config_file"
+        else
+            rm -f "$tmp"
+            error "Could not parse $config_file; the original file was not changed."
+            return 1
+        fi
+    fi
+
+    # Remove native OpenCode command and skill, plus the legacy skill below.
+    rm -f "$definitions_dir/skills/goal/SKILL.md"
+    rmdir "$definitions_dir/skills/goal" "$definitions_dir/skills" 2>/dev/null || true
+    if [[ "$OPENCODE_SCOPE" == "project" ]]; then
+        rm -f .opencode/commands/goal.md
+        rm -f .opencode/plugins/goal/index.ts .opencode/plugins/goal/runtime.mjs
+        rmdir .opencode/plugins/goal .opencode/plugins .opencode/commands .opencode 2>/dev/null || true
+    fi
+
     # Remove skill from .agents/skills/goal/.
     local skill_dir=".agents/skills/goal"
-    if [[ -d "$skill_dir" ]]; then
+    if [[ "$OPENCODE_SCOPE" == "project" ]] && [[ -d "$skill_dir" ]]; then
         rm -rf "$skill_dir"
         success "Removed skill directory $skill_dir"
         # Clean up empty parent dirs.
@@ -233,7 +265,6 @@ uninstall_opencode() {
     fi
 
     # Remove AGENTS.md fragment.
-    local agents_md="AGENTS.md"
     if [[ -f "$agents_md" ]] && grep -qF "<!-- goal-system -->" "$agents_md" 2>/dev/null; then
         local tmp
         tmp="$(mktemp)"
@@ -273,7 +304,7 @@ detect_agents() {
     local detected=()
     if [[ -d "$HOME/.claude" ]] || [[ -d ".claude" ]]; then detected+=("claude"); fi
     if [[ -d "$HOME/.cursor" ]] || [[ -d ".cursor" ]]; then detected+=("cursor"); fi
-    if [[ -f "opencode.json" ]] || [[ -f ".opencode.json" ]] || [[ -d "$HOME/.config/opencode" ]]; then detected+=("opencode"); fi
+    if [[ -f "opencode.json" ]] || [[ -f "opencode.jsonc" ]] || [[ -d ".opencode" ]] || [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" ]]; then detected+=("opencode"); fi
 
     if (( ${#detected[@]} == 0 )); then
         echo ""
@@ -330,6 +361,8 @@ parse_args() {
             --claude)   AGENTS+=("claude") ;;
             --cursor)   AGENTS+=("cursor") ;;
             --opencode) AGENTS+=("opencode") ;;
+            --global)   OPENCODE_SCOPE="global" ;;
+            --project)  OPENCODE_SCOPE="project" ;;
             --all)      AGENTS=("claude" "cursor" "opencode"); REMOVE_CORE=1 ;;
             -h|--help)
                 echo "Usage: ./uninstall.sh [--claude] [--cursor] [--opencode] [--all]"
@@ -339,7 +372,9 @@ parse_args() {
                 echo "Flags:"
                 echo "  --claude     Remove from Claude Code"
                 echo "  --cursor     Remove from Cursor"
-                echo "  --opencode   Remove from OpenCode"
+                echo "  --opencode   Remove global OpenCode installation"
+                echo "  --project    Remove only the current project's OpenCode installation"
+                echo "  --global     Remove global OpenCode installation (default)"
                 echo "  --all        Remove from all agents + delete ~/.goal/"
                 echo "  -h, --help   Show this help message"
                 exit 0

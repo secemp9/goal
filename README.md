@@ -14,7 +14,7 @@ Works with **Claude Code**, **Cursor**, and **OpenCode**.
 ## With goal
 
 - Set a persistent objective that survives across turns
-- Auto-continuation (Claude Code) -- the agent keeps working until the goal is done
+- Auto-continuation (Claude Code and OpenCode V2) -- the agent keeps working until the goal is done
 - Turn budgets -- cap how many turns the agent gets, with automatic wrap-up
 - Budget warnings -- the agent knows when to start summarizing
 - Completion audits -- goals aren't marked done until evidence proves every requirement is met
@@ -71,26 +71,48 @@ Add to `.cursor/mcp.json` in your project:
 
 ### OpenCode
 
-Add to `opencode.json` in your project:
+For OpenCode V2, add to `opencode.json` in your project:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "goal": {
-      "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"],
-      "enabled": true
+    "servers": {
+      "goal": {
+        "type": "local",
+        "command": ["uvx", "--from", "git+https://github.com/secemp9/goal.git", "goal-mcp"]
+      }
     }
   }
 }
 ```
 
-**Full experience (skill + AGENTS.md):**
+**Global install (MCP + `/goal` + skill + auto-continuation plugin + AGENTS.md):**
 
 ```bash
 git clone https://github.com/secemp9/goal.git
 cd goal && ./install.sh --opencode
 ```
+
+Requires `uv`, `jq`, and `python3`. By default, the installer configures OpenCode
+globally in `~/.config/opencode` (or `$XDG_CONFIG_HOME/opencode`), so `/goal`, the
+skill, MCP tools, and continuation work in every directory. It runs the installed
+package from `~/.goal`, so local fixes are used instead of the GitHub version.
+Goal state stays directory-local in `.claude/goal/goal_state.json`; installing
+globally does not share objectives between projects.
+For a project-only installation, run `./install.sh --opencode --project` from
+the target project directory.
+Existing unrelated configuration is preserved, though JSONC comments and formatting
+are normalized when the file is written. OpenCode reloads automatically; use
+`/reload` if needed, then `opencode mcp list` to verify the connection.
+
+`/goal` supports the same lifecycle commands listed below. The OpenCode V2
+plugin injects goal context, automatically continues successful turns, tracks
+turn/time usage, and gives one final wrap-up at the budget limit. A turn is one
+successful execution period, not each tool call. It binds the project goal to
+one root session; child sessions do not drive continuation. User interruption
+or execution failure pauses the goal. Use `/goal resume` to resume deliberately.
+MCP-only configuration does not install continuation or accounting.
 
 ## Usage
 
@@ -146,6 +168,7 @@ All editors get these MCP tools:
     SKILL.md                      # /goal slash command definition
   claude-md-fragment.md           # CLAUDE.md content for goal awareness
   agents-md-fragment.md           # AGENTS.md content for goal awareness (OpenCode)
+  opencode/plugin/               # Native V2 command, context, accounting, continuation
 
 .claude/goal/goal_state.json      # Per-project state file (created at runtime)
 ```
@@ -189,15 +212,27 @@ This system is a faithful port of Codex CLI's goal architecture:
 | `goals.rs` runtime lifecycle | Hook scripts |
 | `goal_menu.rs` display | `goal_cli.sh` |
 
+### OpenCode lifecycle
+
+The V2 plugin registers `/goal` directly, passes command arguments literally to
+the CLI, and injects goal context before model requests. It observes successful
+execution events to account turns/time and queue the next prompt. It does not
+restart failed or interrupted executions. Goals retain their owning session ID
+in the project state; an explicit `/goal resume` can transfer ownership.
+
 ## Auto-Continuation Note
 
-**Auto-continuation (hooks) is Claude Code only.** Other editors (Cursor, OpenCode) get the MCP tools (`get_goal`, `create_goal`, `update_goal`) but do not have hook support, so they cannot auto-continue between turns. Users of those editors need to manually prompt the agent to continue working toward the goal.
+**Auto-continuation requires the full install:** Claude Code uses hooks;
+OpenCode V2 uses its native plugin API. Cursor and MCP-only configurations
+provide goal tools without automatic continuation or turn accounting.
 
 ## Uninstalling
 
 ```bash
 ./uninstall.sh --all      # Remove from all agents + delete ~/.goal/
 ./uninstall.sh --claude   # Remove from Claude Code only
+./uninstall.sh --opencode # Remove global OpenCode integration
+./uninstall.sh --opencode --project # Remove a project-only OpenCode integration
 ```
 
 ## License
